@@ -43,16 +43,13 @@ if (useFixture) {
 }
 
 integTest {
-  dependsOn repositoryPlugin.bundlePlugin
-  runner {
-    systemProperty 'test.s3.bucket', s3Bucket
-    nonInputProperties.systemProperty 'test.s3.base_path', s3BasePath ? s3BasePath + "_searchable_snapshots_tests" + BuildParams.testSeed : 'base_path'
-  }
+  systemProperty 'test.s3.bucket', s3Bucket
+  nonInputProperties.systemProperty 'test.s3.base_path', s3BasePath ? s3BasePath + "_searchable_snapshots_tests" + BuildParams.testSeed : 'base_path'
 }
 
 testClusters.integTest {
   testDistribution = 'DEFAULT'
-  plugin repositoryPlugin.bundlePlugin.archiveFile
+  plugin repositoryPlugin.path
 
   if (BuildParams.isSnapshotBuild() == false) {
     systemProperty 'es.searchable_snapshots_feature_enabled', 'true'
@@ -77,6 +74,6 @@ testClusters.integTest {
   }
 }
 
-task s3ThirdPartyTest {
-  dependsOn integTest
+tasks.register("s3ThirdPartyTest") {
+  dependsOn "integTest"
 }

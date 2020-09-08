@@ -7,12 +7,17 @@
 package org.elasticsearch.xpack.eql.execution.search;
 
 import org.elasticsearch.action.ActionListener;
-import org.elasticsearch.xpack.eql.session.Payload;
+import org.elasticsearch.action.get.GetResponse;
+import org.elasticsearch.action.search.SearchResponse;
+
+import java.util.List;
 
 /**
  * Infrastructure interface used to decouple listener consumers from the stateful classes holding client-references and co.
  */
 public interface QueryClient {
 
-    void query(QueryRequest request, ActionListener<Payload> listener);
+    void query(QueryRequest request, ActionListener<SearchResponse> listener);
+
+    void get(Iterable<List<HitReference>> refs, ActionListener<List<List<GetResponse>>> listener);
 }

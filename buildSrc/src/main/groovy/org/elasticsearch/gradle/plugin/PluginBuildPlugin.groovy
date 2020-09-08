@@ -26,8 +26,8 @@ import org.elasticsearch.gradle.VersionProperties
 import org.elasticsearch.gradle.dependencies.CompileOnlyResolvePlugin
 import org.elasticsearch.gradle.info.BuildParams
 import org.elasticsearch.gradle.test.RestIntegTestTask
+import org.elasticsearch.gradle.test.RestTestBasePlugin
 import org.elasticsearch.gradle.testclusters.RunTask
-import org.elasticsearch.gradle.testclusters.TestClustersPlugin
 import org.elasticsearch.gradle.util.Util
 import org.gradle.api.InvalidUserDataException
 import org.gradle.api.Plugin
@@ -41,8 +41,6 @@ import org.gradle.api.tasks.SourceSet
 import org.gradle.api.tasks.TaskProvider
 import org.gradle.api.tasks.bundling.Zip
 
-import java.util.regex.Matcher
-import java.util.regex.Pattern
 /**
  * Encapsulates build configuration for an Elasticsearch plugin.
  */
@@ -53,7 +51,7 @@ class PluginBuildPlugin implements Plugin<Project> {
     @Override
     void apply(Project project) {
         project.pluginManager.apply(BuildPlugin)
-        project.pluginManager.apply(TestClustersPlugin)
+        project.pluginManager.apply(RestTestBasePlugin)
         project.pluginManager.apply(CompileOnlyResolvePlugin.class);
 
         PluginPropertiesExtension extension = project.extensions.create(PLUGIN_EXTENSION_NAME, PluginPropertiesExtension, project)
@@ -64,7 +62,9 @@ class PluginBuildPlugin implements Plugin<Project> {
 
         createIntegTestTask(project)
         createBundleTasks(project, extension)
-        project.tasks.integTest.dependsOn(project.tasks.bundlePlugin)
+        project.tasks.named("integTest").configure {
+            it.dependsOn(project.tasks.named("bundlePlugin"))
+        }
         if (isModule) {
             project.testClusters.integTest.module(project.tasks.bundlePlugin.archiveFile)
         } else {
@@ -75,10 +75,9 @@ class PluginBuildPlugin implements Plugin<Project> {
             project.extensions.getByType(PluginPropertiesExtension).extendedPlugins.each { pluginName ->
                 // Auto add dependent modules to the test cluster
                 if (project.findProject(":modules:${pluginName}") != null) {
-                    project.integTest.dependsOn(project.project(":modules:${pluginName}").tasks.bundlePlugin)
-                    project.testClusters.integTest.module(
-                        project.project(":modules:${pluginName}").tasks.bundlePlugin.archiveFile
-                    )
+                    project.testClusters.all {
+                        module(":modules:${pluginName}")
+                    }
                 }
             }
             PluginPropertiesExtension extension1 = project.getExtensions().getByType(PluginPropertiesExtension.class)
@@ -98,15 +97,15 @@ class PluginBuildPlugin implements Plugin<Project> {
             }
 
             Map<String, String> properties = [
-                'name'                : extension1.name,
-                'description'         : extension1.description,
-                'version'             : extension1.version,
-                'elasticsearchVersion': Version.fromString(VersionProperties.elasticsearch).toString(),
-                'javaVersion'         : project.targetCompatibility as String,
-                'classname'           : extension1.classname,
-                'extendedPlugins'     : extension1.extendedPlugins.join(','),
-                'hasNativeController' : extension1.hasNativeController,
-                'requiresKeystore'    : extension1.requiresKeystore
+                    'name'                : extension1.name,
+                    'description'         : extension1.description,
+                    'version'             : extension1.version,
+                    'elasticsearchVersion': Version.fromString(VersionProperties.elasticsearch).toString(),
+                    'javaVersion'         : project.targetCompatibility as String,
+                    'classname'           : extension1.classname,
+                    'extendedPlugins'     : extension1.extendedPlugins.join(','),
+                    'hasNativeController' : extension1.hasNativeController,
+                    'requiresKeystore'    : extension1.requiresKeystore
             ]
             project.tasks.named('pluginProperties').configure {
                 expand(properties)
@@ -115,6 +114,14 @@ class PluginBuildPlugin implements Plugin<Project> {
             if (isModule == false || isXPackModule) {
                 addNoticeGeneration(project, extension1)
             }
+        }
+
+        //disable integTest task if project has been converted to use yaml or java rest test plugin
+        project.pluginManager.withPlugin("elasticsearch.yaml-rest-test") {
+            project.tasks.integTest.enabled = false
+        }
+        project.pluginManager.withPlugin("elasticsearch.java-rest-test") {
+            project.tasks.integTest.enabled = false
         }
 
         project.tasks.named('testingConventions').configure {
@@ -131,7 +138,7 @@ class PluginBuildPlugin implements Plugin<Project> {
             }
         }
         project.configurations.getByName('default')
-            .extendsFrom(project.configurations.getByName('runtimeClasspath'))
+                .extendsFrom(project.configurations.getByName('runtimeClasspath'))
         // allow running ES with this plugin in the foreground of a build
         project.tasks.register('run', RunTask) {
             dependsOn(project.tasks.bundlePlugin)
@@ -211,7 +218,7 @@ class PluginBuildPlugin implements Plugin<Project> {
              */
             from { project.plugins.hasPlugin(ShadowPlugin) ? project.shadowJar : project.jar }
             from project.configurations.runtimeClasspath - project.configurations.getByName(
-                CompileOnlyResolvePlugin.RESOLVEABLE_COMPILE_ONLY_CONFIGURATION_NAME
+                    CompileOnlyResolvePlugin.RESOLVEABLE_COMPILE_ONLY_CONFIGURATION_NAME
             )
             // extra files for the plugin to go into the zip
             from('src/main/packaging') // TODO: move all config/bin/_size/etc into packaging
@@ -221,7 +228,7 @@ class PluginBuildPlugin implements Plugin<Project> {
             }
         }
         project.tasks.named(BasePlugin.ASSEMBLE_TASK_NAME).configure {
-          dependsOn(bundle)
+            dependsOn(bundle)
         }
 
         // also make the zip available as a configuration (used when depending on this project)
